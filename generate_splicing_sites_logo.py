@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 
-
 import logomaker
 import argparse
 import os
 import logomaker as lm
 import pandas as pd
+import re
 import gzip
 from Bio import SeqIO
 from collections import Counter
 import matplotlib.pyplot as plt
 
+
+filter_biotype=[]
 def get_exon_number_of_each_transcript(gtf_file):
     """
     Get the number of exons for each transcript from a GTF file.
@@ -50,6 +52,8 @@ def process_gtf(gtf_file):
 
     exon_counts = get_exon_number_of_each_transcript(gtf_file)
     gtf_file.seek(0)  # Reset file pointer to the beginning after counting exons
+    
+    attr_p = re.compile(r';\s*')
     exons =[]
     for line in gtf_file:
         if line.startswith("#"):
@@ -61,18 +65,23 @@ def process_gtf(gtf_file):
             end = int(fields[4])
             strand = fields[6]
             attributes = fields[8]
-            
+
             if strand != "+" and strand != "-":
                 continue
             # Extract transcript_id from attributes
             transcript_id = None
             exon_number = None
-            for attr in attributes.split(";"):
+            transcript_biotype=None
+            for attr in re.split(attr_p, attributes):
                 if "transcript_id" in attr:
                     transcript_id = attr.split('"')[1]
                 if "exon_number" in attr:
                     exon_number = int(attr.split('"')[1])
-                if transcript_id and exon_number:
+                if "transcript_biotype" in attr:
+                    transcript_biotype = attr.split('"')[1]
+                    if transcript_biotype in filter_biotype:
+                        continue
+                if transcript_id and exon_number and transcript_biotype:
                     break
             if not transcript_id or exon_counts[transcript_id] == 1:
                 continue
@@ -124,7 +133,8 @@ def extract_flanking_sequences(exons, genome_fasta):
     else:
         genome = SeqIO.to_dict(SeqIO.parse(genome_fasta, "fasta"))
     flanking_sequences = {"donor": [], "acceptor": []}
-
+    
+    # gtf is 1-based, biopython seq is 0-based, start and end should -1
     for chrom, start, end, strand in exons:
         if chrom not in genome:
             continue
@@ -132,36 +142,22 @@ def extract_flanking_sequences(exons, genome_fasta):
         donor_site, acceptor_site = None, None
         if strand == "+":
             if start:
-                acceptor_site = seq[(start - 20):(start + 3)]
+                acceptor_site = seq[(start - 21):(start + 2)]
             if end:
                 donor_site = seq[(end - 3):(end + 9)]
         elif strand == "-":
             if start:
-                donor_site = seq[(start - 9):(start + 3)].reverse_complement()
+                donor_site = seq[(start - 10):(start + 2)].reverse_complement()
+
             if end:
                 acceptor_site = seq[(end - 3):(end + 20)].reverse_complement()
         else:
             continue
-        # print((chrom, start, end, strand))
-        # print(donor_site)
 
         if donor_site:
             flanking_sequences["donor"].append(str(donor_site))
         if acceptor_site:
             flanking_sequences["acceptor"].append(str(acceptor_site))
-    ## filter donor and acceptor sites based on consensus motifs GT at bases 4 and 5 and AG at bases -4 and -5, respectively
-    filtered_donor = []
-    for seq in flanking_sequences["donor"]:
-        if len(seq) >= 5 and seq[3:5] == "GT":
-            filtered_donor.append(seq)
-    flanking_sequences["donor"] = filtered_donor
-
-    filtered_acceptor = []
-    for seq in flanking_sequences["acceptor"]:
-        if len(seq) >= 4 and seq[-5:-3] == "AG":
-            filtered_acceptor.append(seq)
-    flanking_sequences["acceptor"] = filtered_acceptor
-
     return flanking_sequences
 
 
@@ -176,9 +172,7 @@ def generate_sequence_logo(sequences, title):
     # Count the frequency of each nucleotide at each position
     counts = [Counter(pos) for pos in zip(*sequences)]
     df = pd.DataFrame(counts).fillna(0)
-    print(df)
     df = df.div(df.sum(axis=1), axis=0)  # Normalize to probabilities
-    print(df)
     # Create the sequence logo
     logo = lm.Logo(df, shade_below=.5, fade_below=.5)
     logo.style_xticks(anchor=0, spacing=1)
