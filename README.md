@@ -2,7 +2,7 @@
 
 ## How to use
 $ python generate_splicing_sites_logo.py -h  
-usage: generate_splicing_sites_logo.py [-h] [--gtf GTF] [--genome-fasta GENOME_FASTA]  
+usage: generate_splicing_sites_logo.py [-h] [--gtf GTF] [--genome_fasta GENOME_FASTA]  
 
 generate consensus splicing site logos from a GTF file and a genome fasta file  
 
