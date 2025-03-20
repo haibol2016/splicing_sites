@@ -10,7 +10,7 @@ options:
   -h, --help        show this help message and exit  
   --gtf             an uncompressed or gzipped gtf file (default: None)  
   --genome_fasta    an uncompressed or gzipped genome fasta file (default: None)  
-  --save_filename   an output filename for the sequence logo (default: logo_donor_site.pdf and logo_acceptor_site.pdf),
+  --save_filename   an output filename for the sequence logo (default: logo_donor_site.pdf and logo_acceptor_site.pdf),  
                     the format is determined by the extension  (default: logo.pdf)  
 
 
