@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 
-import logomaker
 import argparse
 import os
-import logomaker as lm
+from logomaker import Logo
 import pandas as pd
 import re
 import gzip
@@ -76,7 +75,11 @@ def process_gtf(gtf_file):
                 if "transcript_id" in attr:
                     transcript_id = attr.split('"')[1]
                 if "exon_number" in attr:
-                    exon_number = int(attr.split('"')[1])
+                    # Ensembl GTF use exon_number "3", but Gencode GTF use exon_number 3.
+                    if '"' in attr:
+                        exon_number = int(attr.split('"')[1])
+                    else:
+                        exon_number = int(attr.split(' ')[1])
                 if "transcript_biotype" in attr:
                     transcript_biotype = attr.split('"')[1]
                     if transcript_biotype in filter_biotype:
@@ -161,11 +164,12 @@ def extract_flanking_sequences(exons, genome_fasta):
     return flanking_sequences
 
 
-def generate_sequence_logo(sequences, title):
+def generate_sequence_logo(sequences, title, ax=None):
     """Generate a sequence logo from a list of sequences.
     arguments:
     sequences -- a list of sequences (strings)
     title -- title for the sequence logo
+    ax -- matplotlib axes object to plot on (optional)
     returns:
     A sequence logo plot.
     """ 
@@ -174,7 +178,7 @@ def generate_sequence_logo(sequences, title):
     df = pd.DataFrame(counts).fillna(0)
     df = df.div(df.sum(axis=1), axis=0)  # Normalize to probabilities
     # Create the sequence logo
-    logo = lm.Logo(df, shade_below=.5, fade_below=.5)
+    logo = Logo(df, shade_below=.5, fade_below=.5, ax=ax)
     logo.style_xticks(anchor=0, spacing=1)
     logo.ax.set_title(title)
     logo.ax.set_ylabel("Proportion")
@@ -198,18 +202,27 @@ def generate_sequence_logo_for_splicing_sites(gtf_file, genome_fasta, filename='
     # Generate sequence logos for donor and acceptor sites
     filename, file_extension = os.path.splitext(filename)
      
-    # Generate sequence logos and save them to two separare files
-    # to do: find a way to save both in one file
+    # Generate sequence logos and save them to a single file
     plt.clf()
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    plt.subplots_adjust(wspace=0.4)  # Adjust space between subplots
+    # First logo 1/2 narrower (0.5x), second logo 2x wider (2x) -> ratio 0.5:2 = 1:4
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 2), gridspec_kw={'width_ratios': [1, 2]})
+    plt.subplots_adjust(wspace=0.04)  # Adjust space between subplots
 
-    donor_logo = generate_sequence_logo(flanking_sequences["donor"], "Donor Site Consensus Motif")
+    # Generate donor logo on the first subplot
+    donor_logo = generate_sequence_logo(flanking_sequences["donor"], "Donor Site Consensus Motif", ax=ax1)
     donor_logo.ax.set_xticklabels('%+d'%x for x in list(range(-3, 0)) + list(range(1, 10)))
-    plt.savefig(filename + "_donor_site" + file_extension, format='pdf')
-    acceptor_logo = generate_sequence_logo(flanking_sequences["acceptor"], "Acceptor Site Consensus Motif")
+    
+    # Generate acceptor logo on the second subplot
+    acceptor_logo = generate_sequence_logo(flanking_sequences["acceptor"], "Acceptor Site Consensus Motif", ax=ax2)
     acceptor_logo.ax.set_xticklabels('%+d'%x for x in list(range(-20, 0)) + list(range(1, 4)))
-    plt.savefig(filename + "_acceptor_site" + file_extension, format='pdf')
+    # Remove y-axis label and ticks from the second plot only
+    acceptor_logo.ax.set_ylabel("")
+    acceptor_logo.ax.set_yticks([])
+    acceptor_logo.ax.tick_params(left=False, labelleft=False)
+    
+    # Save both logos to a single file
+    output_format = file_extension[1:] if file_extension else 'pdf'
+    plt.savefig(filename + file_extension, format=output_format, bbox_inches='tight')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='generate consensus splicing site logos from a GTF file and a genome fasta file',
@@ -220,7 +233,7 @@ if __name__ == "__main__":
     parser.add_argument("--genome_fasta", required=True, metavar='',
                         help="an uncompressed or gzipped genome fasta file")
     parser.add_argument("--save_filename", metavar='', required =False,
-                        help="an output filename for the sequence logo (default: logo_donor_site.pdf and logo_acceptor_site.pdf), "
+                        help="an output filename for the sequence logo (default: logo.pdf), "
                         "the format is determined by the extension",
                         default='logo.pdf')
 
