@@ -1,4 +1,4 @@
-# A python script to generate typical motif of RNA splicing_sites
+# A python script to generate RNA splicing site motifs from a GTF and a genome fasta files
 
 ## How to use
 $ python generate_splicing_sites_logo.py -h  
